@@ -1,0 +1,121 @@
+/* ログイン画面（AuthGate）の和紙・墨・苔色と揃えた単一の配色。明暗や配色の切り替えは持たない。
+   中立色は暖色、ブランドは苔色、サイドバーは深い茶。 */
+/* Design tokens. Light theme values are the palette the app already shipped;
+   every colour here was derived by clustering the previously hard-coded values. */
+:root {
+  /* テキスト（濃→淡のランプ） */
+  /* ink-1〜8は文字色。番号が上がるほど控えめだが、最も薄いink-8でも
+     card/subtle/page のどの背景でもWCAG AA（4.5:1）を満たす値にしている。
+     意図的に沈ませたい装飾には ink-muted を使う。 */
+  --ink-1: #3a2e24;
+  --ink-2: #45382d;
+  --ink-3: #4d4034;
+  --ink-4: #56483b;
+  --ink-5: #5d4f41;
+  --ink-6: #635444;
+  --ink-7: #695a49;
+  --ink-8: #705f4d;
+  --ink-muted: #a89c8b;
+  /* テキスト（ブランド・状態） */
+  --text-brand-strong: #46683f;
+  --text-brand: #4a6d41;
+  --text-warn: #a46c3e;
+  --text-warn-strong: #c47a40;
+  --text-danger: #b14d42;
+  --text-danger-soft: #bd5d53;
+  --text-info: #56799e;
+  /* テキスト（濃色面の上） */
+  --text-on-inverse: #f8efe0;
+  --text-on-inverse-muted: #cbb79d;
+  --text-on-solid: #ffffff;
+  /* サーフェス */
+  --surface-page: #f7f2e8;
+  --surface-card: #fffdf8;
+  --surface-subtle: #fbf7ef;
+  --surface-muted: #f0e9db;
+  --surface-raised: #e6dcc9;
+  --surface-accent: #e9efdf;
+  --surface-accent-solid: #4d6f45;
+  --surface-accent-solid-soft: #5b7d52;
+  --surface-inverse: #4a3b2e;
+  --surface-inverse-deep: #3a2e24;
+  --surface-inverse-mid: #67513d;
+  --surface-warn: #faeee2;
+  --surface-warn-solid: #dc8b49;
+  --surface-warn-solid-soft: #e7a259;
+  --surface-danger: #faeae7;
+  --surface-danger-solid: #c65f54;
+  --surface-danger-solid-soft: #ac6e62;
+  --surface-info: #edf0fa;
+  --surface-info-solid: #6685d1;
+  --surface-neutral: #9aa8a5;
+  /* 残存していた一点物を役割トークン化 */
+  --border-brand-mid: #86a279;
+  --ink-warm: #6c5d50;
+  --ink-warm-strong: #665241;
+  --ink-warm-soft: #9d8a78;
+  --ink-teal-soft: #9bb2b3;
+  --ink-blue: #4b6ec0;
+  --ink-brand-deep: #3f5f3a;
+  --ink-danger-deep: #a05e56;
+  /* サイドバーの和紙のざらつき（繊維のノイズ）。画像ファイルは使わない。 */
+  --sidebar-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .36 0 0 0 0 .25 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* 半透明（ぼかし付きの重ね面） */
+  --surface-translucent: rgba(255,253,248,.86);
+  --surface-translucent-strong: rgba(255,253,248,.96);
+  --border-translucent: rgba(255,255,255,.55);
+  /* ボーダー */
+  --border-subtle: #efe8da;
+  --border-default: #e6dccb;
+  --border-muted: #e3d8c6;
+  --border-mid: #d8cbb5;
+  --border-soft: #cdbea5;
+  --border-brand: #9db58f;
+  --border-brand-strong: #6f9263;
+  --border-warn: #efdcc8;
+  --border-warn-mid: #d9c3ae;
+  --border-danger: #ead8d4;
+  --border-danger-mid: #d9a9a2;
+  --border-danger-soft: #efc8c2;
+  --border-inverse: #67513d;
+  --border-inverse-strong: #3a2e24;
+  /* 反転面（サイドバー）の上のブランド色。ロゴの帯など */
+  --brand-on-inverse: #e8c98f;
+  /* 用途に依存しない色パレット。業務マップの分類色と業務マスター画面の区画色が同じ色を引く。
+     line=見出しと縁、soft=地、ink=文字。いずれもsoftの上でコントラスト比4.5:1以上。 */
+  --hue-blue-line: #4f74c0;
+  --hue-blue-soft: #e9eefa;
+  --hue-blue-ink: #3f60a6;
+  --hue-green-line: #347e72;
+  --hue-green-soft: #e2f1ec;
+  --hue-green-ink: #2c6f64;
+  --hue-cyan-line: #3f8ba0;
+  --hue-cyan-soft: #e6f2f6;
+  --hue-cyan-ink: #2c6b7d;
+  --hue-amber-line: #c8853e;
+  --hue-amber-soft: #fbeedd;
+  --hue-amber-ink: #8a5a30;
+  --hue-violet-line: #7d6ab8;
+  --hue-violet-soft: #efeafa;
+  --hue-violet-ink: #6a58a2;
+  --hue-rose-line: #c0637f;
+  --hue-rose-soft: #fbe9ee;
+  --hue-rose-ink: #a55068;
+  --hue-gray-line: #93a3a2;
+  --hue-gray-soft: #eef1f0;
+  --hue-gray-ink: #566d72;
+}
+
+:root {
+  --improvement-space-sm: 8px;
+  --improvement-space-md: 16px;
+  --improvement-space-lg: 24px;
+  --improvement-radius: 12px;
+  --improvement-column-min: 240px;
+  --improvement-font-size: 14px;
+  --improvement-outline: 3px;
+  --improvement-title-size: 20px;
+  --improvement-badge-size: 12px;
+  --improvement-badge-padding: 4px 10px;
+  --improvement-badge-radius: 6px;
+}

@@ -1,0 +1,1 @@
+"""Hinami backend application."""

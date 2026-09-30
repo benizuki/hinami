@@ -1,0 +1,36 @@
+# Docker Composeのお試し版（1人用・ログインなし・この端末のみ）。
+#   cp .env.example .env    # GEMINI_API_KEY を入れる
+#   docker compose up -d --build
+#   open http://localhost:8080   # HINAMI_COMPOSE_PORT で変えられる
+#
+# Googleログインは使わない。ホストの127.0.0.1だけに公開し、アプリ側でも接続元を
+# Docker網のゲートウェイ（=このホスト）に限る。他の人に公開する用途には使わないこと。
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${HINAMI_COMPOSE_PORT:-8080}:8080"
+    env_file: .env
+    environment:
+      # .env に値があっても、このお試し版ではログインなしで動かす。
+      GOOGLE_OAUTH_CLIENT_ID: ""
+      # ホストの127.0.0.1:8080へ来た接続は、この網のゲートウェイから届く。
+      # 同じ網の他のコンテナはゲートウェイ以外のアドレスになるため弾かれる。
+      HINAMI_LOCAL_CLIENT_HOSTS: ${HINAMI_COMPOSE_GATEWAY:-172.29.90.1}
+      HINAMI_TRUST_FORWARDED_FOR: ""
+      HINAMI_CORS_ORIGINS: http://localhost:${HINAMI_COMPOSE_PORT:-8080},http://127.0.0.1:${HINAMI_COMPOSE_PORT:-8080}
+    # 転送ヘッダーで接続元を書き換えさせない。
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
+    volumes:
+      - hinami-data:/app/data
+    restart: unless-stopped
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${HINAMI_COMPOSE_SUBNET:-172.29.90.0/24}
+          gateway: ${HINAMI_COMPOSE_GATEWAY:-172.29.90.1}
+
+volumes:
+  hinami-data:

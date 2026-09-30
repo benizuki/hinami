@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.DS_Store
+.pytest_cache/
+.hinami-data/
+backend/app/data/*
+!backend/app/data/README.md
+.ruff_cache/

@@ -1,0 +1,60 @@
+
+
+.department-id-display { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 39px; padding: 0 10px; border: 1px solid var(--border-muted); border-radius: 9px; color: var(--ink-6); background: var(--surface-page); }
+.department-id-display code { color: var(--ink-3); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; font-weight: 700; letter-spacing: .5px; }
+.department-id-display .v-icon { color: var(--ink-7); }
+
+.org-unit-page__layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(320px,.85fr); gap:14px; align-items:start; }
+.org-unit-tree,.org-unit-editor { padding:16px; }
+.org-unit-empty { margin:14px 0 4px; color:var(--ink-5); font-size:13px; line-height:1.7; }
+.org-unit-tree__rows { display:grid; gap:4px; margin-top:12px; }
+.org-unit-tree__row { position:relative; display:flex; align-items:center; gap:4px; padding-left:calc(var(--depth) * 24px); border-radius:9px; }
+.org-unit-tree__row.active { background:var(--surface-accent); }
+.org-unit-tree__row:hover { background:var(--surface-subtle); }
+/* 階層のつながりを示す縦線と、親から伸びる枝。 */
+.org-unit-tree__row::before { content:""; position:absolute; left:calc(var(--depth) * 24px - 13px); top:0; bottom:0; border-left:1px solid var(--border-brand-mid); }
+.org-unit-tree__row::after { content:""; position:absolute; left:calc(var(--depth) * 24px - 13px); top:50%; width:9px; border-top:1px solid var(--border-brand-mid); }
+.org-unit-tree__row[style*="--depth: 0"]::before,.org-unit-tree__row[style*="--depth: 0"]::after { display:none; }
+.org-unit-tree__toggle,.org-unit-tree__leaf { display:grid; place-items:center; flex:0 0 24px; width:24px; height:32px; border:0; color:var(--ink-5); background:transparent; }
+.org-unit-tree__leaf::after { content:""; width:6px; height:6px; border-radius:50%; background:var(--border-brand-mid); }
+.org-unit-tree__label { display:flex; align-items:baseline; gap:9px; flex:1; min-width:0; padding:8px 10px; border:0; border-radius:8px; text-align:left; background:transparent; }
+.org-unit-tree__label b { color:var(--ink-1); font-size:15px; }
+.org-unit-tree__label em { flex:0 0 auto; padding:2px 8px; border-radius:999px; color:var(--text-brand-strong); background:var(--surface-accent); font-size:12px; font-style:normal; font-weight:700; }
+.org-unit-tree__label small { color:var(--ink-5); font-size:12px; }
+.org-unit-tree__actions { display:flex; gap:2px; flex:0 0 auto; opacity:0; transition:opacity .15s; }
+.org-unit-tree__row:hover .org-unit-tree__actions,.org-unit-tree__row.active .org-unit-tree__actions { opacity:1; }
+.org-unit-tree__actions button { display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:7px; color:var(--ink-5); background:transparent; }
+.org-unit-tree__actions button:hover { color:var(--text-brand-strong); background:var(--surface-card); }
+.org-unit-tree__actions button:last-child:hover { color:var(--text-danger); background:var(--surface-danger); }
+.org-unit-editor { display:grid; gap:14px; align-content:start; }
+.org-unit-editor__actions { display:flex; align-items:center; gap:8px; margin-top:2px; }
+.org-unit-editor__note { display:flex; align-items:flex-start; gap:6px; margin:0; padding:11px; border-radius:9px; color:var(--ink-5); background:var(--surface-subtle); font-size:12px; line-height:1.6; }
+.org-unit-editor__note .v-icon { flex:0 0 auto; margin-top:1px; color:var(--text-brand); }
+@media(max-width:1000px){.org-unit-page__layout{grid-template-columns:1fr}}
+.org-unit-tree__departments { display:inline-flex; align-items:center; gap:4px; color:var(--ink-5); font-size:12px; }
+.org-unit-tree__departments .v-icon { color:var(--text-brand); }
+
+.mail-rule-tabs { display:flex; gap:6px; margin-bottom:12px; }
+.mail-rule-tabs button { padding:8px 14px; border:1px solid var(--border-default); border-radius:999px; color:var(--ink-5); background:var(--surface-card); font-size:13px; font-weight:650; }
+.mail-rule-tabs button:hover { border-color:var(--border-brand-strong); }
+.mail-rule-tabs button.active { border-color:var(--border-brand-strong); color:var(--text-brand-strong); background:var(--surface-accent); }
+.mail-rule-rows { display:grid; gap:4px; margin-top:12px; }
+.mail-rule-row { display:flex; align-items:center; gap:4px; border-radius:9px; }
+.mail-rule-row.active { background:var(--surface-accent); }
+.mail-rule-row:hover { background:var(--surface-subtle); }
+.mail-rule-row__label { display:flex; flex-wrap:wrap; align-items:baseline; gap:9px; flex:1; min-width:0; padding:9px 11px; border:0; border-radius:8px; text-align:left; background:transparent; }
+.mail-rule-row__label b { color:var(--ink-1); font-size:15px; }
+.mail-rule-row__label em { flex:0 0 auto; padding:2px 8px; border-radius:999px; color:var(--text-brand-strong); background:var(--surface-accent); font-size:12px; font-style:normal; font-weight:700; }
+.mail-rule-row__label small { color:var(--ink-5); font-size:12px; overflow-wrap:anywhere; }
+.mail-rule-trial { display:grid; gap:12px; margin-top:14px; padding:16px; }
+.mail-rule-trial__inputs { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+.mail-rule-trial__result { display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:11px 13px; border:1px solid var(--border-subtle); border-radius:10px; background:var(--surface-card); }
+.mail-rule-trial__result b { color:var(--ink-1); font-size:15px; }
+.mail-rule-trial__result em { padding:2px 8px; border-radius:999px; color:var(--text-brand-strong); background:var(--surface-accent); font-size:12px; font-style:normal; font-weight:700; }
+.mail-rule-trial__result small { color:var(--ink-5); font-size:12px; }
+
+/* ユーザー管理の絞り込み。テナントと組織を横並びにして、右端に件数を出す。 */
+.user-admin-filters { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:14px; }
+.user-admin-filters .v-select { flex:0 1 240px; }
+.user-admin-filters__count { margin-left:auto; color:var(--ink-7); font-size:13px; font-weight:700; }
+.user-admin-filters .v-btn { letter-spacing:0; text-transform:none; }
