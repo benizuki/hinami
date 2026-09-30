@@ -1,5 +1,5 @@
 # The frontend dependencies are compatible with musl, so keep the build stage small.
-FROM node:22-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -7,7 +7,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.12-slim-trixie AS runtime
+FROM python:3.14-slim-trixie AS runtime
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
 

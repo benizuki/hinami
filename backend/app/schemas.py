@@ -828,6 +828,12 @@ class TenantUpdate(BaseModel):
 class AuthConfig(BaseModel):
     google_oauth_enabled: bool
     google_client_id: str = ""
+    # メールアドレスだけで入れるお試しログイン（Docker Composeの体験用）。
+    demo_login_enabled: bool = False
+
+
+class AuthDemoLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
 
 
 class AuthGoogleLoginRequest(BaseModel):

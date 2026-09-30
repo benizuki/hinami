@@ -32,8 +32,9 @@ from .api import (  # noqa: E402
     users_api,
     work_journals_api,
 )
+from .api.common import ensure_root_org_unit  # noqa: E402
 from .api.middleware import allowed_origins, authorize_api_requests, prune_ai_usage  # noqa: E402
-from .core.auth import ensure_auth_secret, ensure_user_master, validate_auth_configuration  # noqa: E402
+from .core.auth import ensure_auth_secret, ensure_user_master, list_tenants, validate_auth_configuration  # noqa: E402
 from .core.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from .runtime import is_production  # noqa: E402
 
@@ -43,6 +44,8 @@ async def lifespan(_app: FastAPI):
     validate_auth_configuration()
     ensure_user_master()
     ensure_auth_secret()
+    for tenant in list_tenants():
+        ensure_root_org_unit(tenant["id"])
     prune_ai_usage()
     yield
 

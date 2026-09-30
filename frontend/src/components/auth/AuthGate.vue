@@ -10,9 +10,20 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 defineProps<{
   buttonReady: boolean
+  // メールアドレスだけで入れるお試しログイン（Docker Composeの体験用）
+  demoLogin?: boolean
   error: string
   loading: boolean
 }>()
+
+const emit = defineEmits<{ 'demo-login': [email: string] }>()
+
+const demoEmail = ref('')
+
+function submitDemo() {
+  const email = demoEmail.value.trim()
+  if (email) emit('demo-login', email)
+}
 
 type Scene = { ask: string; lines: string[] }
 
@@ -145,7 +156,22 @@ const MOTES = Array.from({ length: 16 }, () => ({
       <section class="auth-card" aria-labelledby="auth-card-title">
         <p class="auth-card__eyebrow">日次記をひらく</p>
         <h2 id="auth-card-title">おかえりなさい</h2>
-        <div class="auth-card__button">
+        <form v-if="demoLogin" class="auth-card__demo" @submit.prevent="submitDemo">
+          <label for="auth-demo-email">メールアドレス</label>
+          <input
+            id="auth-demo-email"
+            v-model="demoEmail"
+            type="email"
+            name="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+            autofocus
+          >
+          <button type="submit" :disabled="loading || !demoEmail.trim()">はじめる</button>
+          <p class="auth-card__note">お試し版です。パスワードは要りません。はじめてのメールアドレスは、そのまま新しい利用者として登録されます。</p>
+        </form>
+        <div v-else class="auth-card__button">
           <slot />
           <button v-if="!buttonReady" class="auth-card__pending" disabled>Googleログインを準備中</button>
         </div>
@@ -255,6 +281,19 @@ const MOTES = Array.from({ length: 16 }, () => ({
 .auth-card h2 { margin: 0 0 26px; font-family: var(--auth-serif); font-size: 26px; font-weight: 600; letter-spacing: 1px; }
 .auth-card__button { display: grid; min-height: 44px; }
 .auth-card__button :slotted(.google-login-button) { min-height: 44px; }
+.auth-card__demo { display: grid; gap: 10px; }
+.auth-card__demo label { color: var(--ink-soft); font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+.auth-card__demo input {
+  height: 44px; padding: 0 16px; border: 1px solid var(--line); border-radius: 22px;
+  color: var(--ink); background: color-mix(in srgb, var(--sheet) 70%, transparent); font-size: 15px;
+}
+.auth-card__demo input:focus-visible { outline: 2px solid var(--seal); outline-offset: 1px; }
+.auth-card__demo button {
+  height: 44px; border: 0; border-radius: 22px; color: #fff; background: var(--seal);
+  font-size: 15px; font-weight: 700; letter-spacing: 2px; cursor: pointer;
+}
+.auth-card__demo button:disabled { opacity: .5; cursor: default; }
+.auth-card__note { margin: 4px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
 .auth-card__pending {
   width: 100%; height: 44px; border: 1px dashed var(--line); border-radius: 22px;
   color: var(--ink-soft); background: transparent; font-size: 13px;

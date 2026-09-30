@@ -12,16 +12,24 @@ from ..core.ai_usage import BurstLimiter
 from ..core.auth import (
     AUTH_COOKIE_NAME,
     DEFAULT_TENANT_ID,
-    auth_enabled,
     auth_token_ttl_seconds,
+    authenticate_demo_email,
     authenticate_google_credential,
+    demo_login_enabled,
     google_oauth_client_id,
     issue_app_token,
     revoke_user_tokens,
+    validate_auth_configuration,
     verify_app_token,
 )
-from ..schemas import AuthConfig, AuthGoogleLoginRequest, AuthLoginResponse, AuthUser
-from .common import header_tenant_id, user_org_unit_id
+from ..schemas import (
+    AuthConfig,
+    AuthDemoLoginRequest,
+    AuthGoogleLoginRequest,
+    AuthLoginResponse,
+    AuthUser,
+)
+from .common import ensure_root_org_unit, header_tenant_id, user_org_unit_id
 from .middleware import client_ip, request_is_https
 
 router = APIRouter()
@@ -54,15 +62,16 @@ def _auth_user_from_dict(user: dict[str, Any], tenant_id: str = DEFAULT_TENANT_I
 
 @router.get("/api/auth/config", response_model=AuthConfig)
 def auth_config() -> AuthConfig:
+    validate_auth_configuration()
     return AuthConfig(
-        google_oauth_enabled=auth_enabled(),
+        google_oauth_enabled=bool(google_oauth_client_id()),
         google_client_id=google_oauth_client_id(),
+        demo_login_enabled=demo_login_enabled(),
     )
 
 
-@router.post("/api/auth/google", response_model=AuthLoginResponse, response_model_exclude_none=True)
-def auth_google(payload: AuthGoogleLoginRequest, request: Request, response: Response) -> AuthLoginResponse:
-    # 未認証で呼べるうえ、1回ごとにGoogleのトークン検証へ進む。接続元ごとに連打を止める。
+def _limit_login_attempts(request: Request) -> None:
+    # 未認証で呼べるため、接続元ごとに連打を止める。
     retry_after = _login_limiter.try_acquire(
         LOGIN_LIMIT_SCOPE, client_ip(request), LOGIN_RATE_PER_MINUTE
     )
@@ -72,7 +81,9 @@ def auth_google(payload: AuthGoogleLoginRequest, request: Request, response: Res
             detail="ログイン試行が集中しています。少し待ってから試してください。",
             headers={"Retry-After": str(retry_after)},
         )
-    user = authenticate_google_credential(payload.credential)
+
+
+def _start_session(request: Request, response: Response, user: dict[str, Any]) -> AuthLoginResponse:
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=issue_app_token(user),
@@ -83,6 +94,27 @@ def auth_google(payload: AuthGoogleLoginRequest, request: Request, response: Res
         path="/",
     )
     return AuthLoginResponse(user=_auth_user_from_dict(user, header_tenant_id(request)))
+
+
+@router.post("/api/auth/google", response_model=AuthLoginResponse, response_model_exclude_none=True)
+def auth_google(payload: AuthGoogleLoginRequest, request: Request, response: Response) -> AuthLoginResponse:
+    # 1回ごとにGoogleのトークン検証へ進むため、接続元ごとに連打を止める。
+    _limit_login_attempts(request)
+    return _start_session(request, response, authenticate_google_credential(
+            payload.credential,
+            root_org_unit_id=ensure_root_org_unit(DEFAULT_TENANT_ID),
+        ),
+    )
+
+
+@router.post("/api/auth/demo", response_model=AuthLoginResponse, response_model_exclude_none=True)
+def auth_demo(payload: AuthDemoLoginRequest, request: Request, response: Response) -> AuthLoginResponse:
+    """メールアドレスだけで入るお試しログイン。Docker Composeでの体験用。"""
+    if not demo_login_enabled():
+        raise HTTPException(status_code=404, detail="お試しログインは有効ではありません。")
+    _limit_login_attempts(request)
+    user = authenticate_demo_email(payload.email, root_org_unit_id=ensure_root_org_unit(DEFAULT_TENANT_ID))
+    return _start_session(request, response, user)
 
 
 @router.get("/api/auth/me", response_model=AuthUser)

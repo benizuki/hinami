@@ -57,6 +57,8 @@ const {
   appAccessible,
   initializeAuth,
   handleLogout,
+  handleDemoLogin,
+  loginRequired,
   loadTenants,
   loadUsers,
   loadOrgUnits,
@@ -92,10 +94,12 @@ onMounted(() => {
 <template>
   <v-app>
     <AuthGate
-      v-if="authReady && authConfig.google_oauth_enabled && !currentUser"
+      v-if="authReady && loginRequired && !currentUser"
       :button-ready="Boolean(googleButton)"
+      :demo-login="Boolean(authConfig.demo_login_enabled)"
       :error="authError"
       :loading="authLoading"
+      @demo-login="handleDemoLogin"
     >
       <div ref="googleButton" class="google-login-button"></div>
     </AuthGate>

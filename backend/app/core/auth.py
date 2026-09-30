@@ -8,6 +8,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import secrets
 import tempfile
 import time
@@ -49,6 +50,9 @@ TENANT_MASTER_FILE = AUTH_DIR / "tenant_master.json"
 # APP_AUTH_SECRET が未設定のとき、初回に生成して保存する署名鍵。
 AUTH_SECRET_FILE = AUTH_DIR / "app_auth_secret"
 DEFAULT_TENANT_ID = "default"
+# 組織マスターの初期値。組織が無いテナントへ自動で作り、新しい利用者の所属先にする。
+ROOT_ORG_UNIT_ID = "root"
+ROOT_ORG_UNIT_NAME = "ルート"
 GOOGLE_TOKEN_CLOCK_SKEW_SECONDS = 30
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,17 @@ def ensure_user_master() -> None:
 
 def google_oauth_client_id() -> str:
   return os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+
+
+def demo_login_enabled() -> bool:
+  """メールアドレスだけで入れるお試しログイン（Docker Composeの体験用）。
+
+  パスワードもGoogleの確認も無いため、Googleログインとは併用できず、
+  ログインなしの開発モードと同じく接続元を手元の端末に限る。
+  """
+  if google_oauth_client_id():
+    return False
+  return os.getenv("HINAMI_DEMO_LOGIN", "").strip().lower() in {"1", "true", "yes"}
 
 
 def bootstrap_admin_emails() -> set[str]:
@@ -103,7 +118,13 @@ def local_client_hosts() -> set[str]:
 def validate_auth_configuration() -> None:
   extra_clients = local_client_hosts()
   detected = [key for key in CLOUD_RUNTIME_ENV_KEYS if os.getenv(key)]
+  demo_requested = os.getenv("HINAMI_DEMO_LOGIN", "").strip().lower() in {"1", "true", "yes"}
   if google_oauth_client_id():
+    if demo_requested:
+      raise RuntimeError(
+        "HINAMI_DEMO_LOGIN は GOOGLE_OAUTH_CLIENT_ID が未設定のときだけ使えます。"
+        "メールアドレスだけで入れるため、Googleログインとは併用できません。"
+      )
     if extra_clients:
       raise RuntimeError(
         "HINAMI_LOCAL_CLIENT_HOSTS はログインなしの開発モード"
@@ -116,6 +137,8 @@ def validate_auth_configuration() -> None:
         "生成した鍵は再起動やインスタンス間で共有されません。"
       )
     return
+  if demo_requested and os.getenv("APP_ENV", "").strip().lower() in {"prod", "production"}:
+    raise RuntimeError("HINAMI_DEMO_LOGIN は本番環境（APP_ENV=production）では使えません。")
   if detected:
     raise RuntimeError(
       "GOOGLE_OAUTH_CLIENT_ID が未設定のままクラウド上で起動しようとしています"
@@ -152,8 +175,9 @@ def local_client_is_allowed(client_host: str | None) -> bool:
 
 
 def auth_enabled() -> bool:
+  """ログイン（トークンと権限の判定）を使うか。Googleログインとお試しログインの両方を含む。"""
   validate_auth_configuration()
-  return bool(google_oauth_client_id())
+  return bool(google_oauth_client_id()) or demo_login_enabled()
 
 
 def auth_token_ttl_seconds() -> int:
@@ -648,7 +672,7 @@ def verify_google_credential(credential: str) -> dict[str, str]:
   }
 
 
-def authenticate_google_credential(credential: str) -> dict[str, Any]:
+def authenticate_google_credential(credential: str, *, root_org_unit_id: str = "") -> dict[str, Any]:
   google_user = verify_google_credential(credential)
   user = _find_user_by_subject(google_user["google_subject"]) or _find_user_by_email(google_user["email"])
   if not user:
@@ -670,6 +694,13 @@ def authenticate_google_credential(credential: str) -> dict[str, Any]:
         org_unit_id=None,
         role="admin",
         enabled=True,
+        **(
+          {"tenant_memberships": [
+            {"tenant_id": DEFAULT_TENANT_ID, "role": "admin", "org_unit_id": root_org_unit_id}
+          ]}
+          if root_org_unit_id
+          else {}
+        ),
       )
     else:
       raise HTTPException(status_code=403, detail="ユーザーマスタに登録されたアカウントのみ利用できます。")
@@ -680,6 +711,43 @@ def authenticate_google_credential(credential: str) -> dict[str, Any]:
     "oauth_name": google_user.get("name") or user.get("name"),
     "oauth_picture": google_user.get("picture") or None,
   }
+
+
+_DEMO_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def authenticate_demo_email(email: str, *, root_org_unit_id: str = "") -> dict[str, Any]:
+  """お試しログイン。メールアドレスだけで入り、未登録なら利用者を作る。
+
+  最初の1人は全体管理者にして全画面を試せるようにし、以降は一般利用者にする。
+  作成した利用者は、渡された組織（ルート）に所属させる。
+  """
+  if not demo_login_enabled():
+    raise HTTPException(status_code=404, detail="お試しログインは有効ではありません。")
+  normalized = email.strip().lower()
+  if len(normalized) > 254 or not _DEMO_EMAIL_PATTERN.match(normalized):
+    raise HTTPException(status_code=400, detail="メールアドレスの形式が正しくありません。")
+  user = _find_user_by_email(normalized)
+  if user:
+    return user
+  if any(row["email"] == normalized for row in list_user_master_entries()):
+    raise HTTPException(status_code=403, detail="このアカウントは無効になっています。")
+  is_first = len(list_user_master_entries()) == 0
+  membership: dict[str, Any] = {
+    "tenant_id": DEFAULT_TENANT_ID,
+    "role": "admin" if is_first else "user",
+    "org_unit_id": root_org_unit_id,
+  }
+  return create_user_master_entry(
+    email=normalized,
+    name=normalized.split("@", 1)[0],
+    department=None,
+    department_id=None,
+    org_unit_id=None,
+    role="admin" if is_first else "none",
+    enabled=True,
+    tenant_memberships=[membership],
+  )
 
 
 def issue_app_token(user: dict[str, Any]) -> str:

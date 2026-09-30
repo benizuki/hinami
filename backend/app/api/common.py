@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, Request
 
 from .. import runtime
-from ..core.auth import DEFAULT_TENANT_ID, auth_enabled
+from ..core.auth import DEFAULT_TENANT_ID, ROOT_ORG_UNIT_ID, ROOT_ORG_UNIT_NAME, auth_enabled
 from ..schemas import OrgUnitRecord
 
 
@@ -33,6 +34,28 @@ def work_journal_owner(request: Request) -> str:
 def tenant_org_units(tenant_id: str) -> list[OrgUnitRecord]:
     """人の所属を表す組織単位。"""
     return runtime.store.list_org_units(tenant_id)
+
+
+def ensure_root_org_unit(tenant_id: str) -> str:
+    """組織マスターの初期値「ルート」を用意し、そのIDを返す。
+
+    組織が1つも無いテナントにだけ作る。すでに組織があり「ルート」が無い（削除・改名済み）
+    場合は作り直さず、空を返す。
+    """
+    units = tenant_org_units(tenant_id)
+    if units:
+        return ROOT_ORG_UNIT_ID if any(unit.id == ROOT_ORG_UNIT_ID for unit in units) else ""
+    runtime.store.save_org_unit(
+        OrgUnitRecord(
+            id=ROOT_ORG_UNIT_ID,
+            tenant_id=tenant_id,
+            name=ROOT_ORG_UNIT_NAME,
+            kind="全社",
+            updated_at=datetime.now(timezone.utc).isoformat(),
+        ),
+        tenant_id,
+    )
+    return ROOT_ORG_UNIT_ID
 
 
 def resolve_org_unit(value: str, tenant_id: str) -> tuple[str, str]:

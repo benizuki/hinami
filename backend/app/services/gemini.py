@@ -27,7 +27,7 @@ from ..schemas import AudioTranscriptionDecision
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 DEFAULT_CHAT_THINKING_LEVEL = "LOW"
 DEFAULT_DOCUMENT_THINKING_LEVEL = "HIGH"
 DEFAULT_REQUEST_TIMEOUT_MS = 120_000

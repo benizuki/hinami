@@ -164,7 +164,8 @@ class CloudTtsTest(unittest.TestCase):
         client = self.use_client(_FakeCloudClient())
         client.list_voices = lambda **_: (_ for _ in ()).throw(RuntimeError("API has not been used"))
 
-        result = cloud_tts.check_cloud_tts()
+        with patch("backend.app.core.google_cloud_auth.refresh_google_cloud_credentials"):
+            result = cloud_tts.check_cloud_tts()
 
         self.assertEqual((result["ok"], result["step"]), (False, "api"))
         self.assertIn("API has not been used", result["message"])
@@ -173,7 +174,8 @@ class CloudTtsTest(unittest.TestCase):
         client = self.use_client(_FakeCloudClient())
         client.list_voices = lambda **_: SimpleNamespace(voices=[1, 2, 3])
 
-        result = cloud_tts.check_cloud_tts()
+        with patch("backend.app.core.google_cloud_auth.refresh_google_cloud_credentials"):
+            result = cloud_tts.check_cloud_tts()
 
         self.assertTrue(result["ok"])
         self.assertIn("3件", result["message"])

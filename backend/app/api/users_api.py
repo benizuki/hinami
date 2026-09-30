@@ -16,7 +16,7 @@ from ..core.auth import (
     update_user_master_entry,
 )
 from ..schemas import UserMasterEntry, UserMasterUpdate
-from .common import request_tenant_id, request_user_email_or_empty, resolve_org_unit
+from .common import ensure_root_org_unit, request_tenant_id, request_user_email_or_empty, resolve_org_unit
 
 router = APIRouter()
 
@@ -70,12 +70,19 @@ def _tenant_managed_entry(email: str, tenant_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=404, detail="このテナントに所属するユーザーが見つかりません。")
 
 
-def _validated_memberships(memberships: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """所属を保存する前に、テナントと、そのテナントの組織であることを確かめる。"""
+def _validated_memberships(
+    memberships: list[dict[str, Any]], *, default_to_root: bool = False
+) -> list[dict[str, Any]]:
+    """所属を保存する前に、テナントと、そのテナントの組織であることを確かめる。
+
+    default_to_rootなら、所属組織が空の所属を「ルート」にする（新規ユーザーの初期値）。
+    """
     for membership in memberships:
         tenant_id = str(membership.get("tenant_id") or "").strip().lower()
         get_tenant(tenant_id, require_enabled=False)
         org_unit_id = str(membership.get("org_unit_id") or "").strip()
+        if not org_unit_id and default_to_root:
+            org_unit_id = ensure_root_org_unit(tenant_id)
         if not org_unit_id:
             membership["org_unit_id"] = ""
             continue
@@ -147,7 +154,7 @@ def create_user(payload: UserMasterEntry, request: Request) -> UserMasterEntry:
             ),
         }]
         role = "none"
-    memberships = _validated_memberships(memberships)
+    memberships = _validated_memberships(memberships, default_to_root=True)
     entry = create_user_master_entry(
         email=payload.email,
         name=payload.name,

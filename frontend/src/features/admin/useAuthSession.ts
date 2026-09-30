@@ -9,6 +9,7 @@ import {
   getOrgUnits,
   getUsers,
   saveOrgUnit,
+  loginWithDemoEmail,
   loginWithGoogleCredential,
   logout,
   saveTenant,
@@ -57,7 +58,7 @@ function createAuthSession() {
   const { notify } = useNotifier()
   const { navItems, mastersNavItem, isMasterView, lastMasterView, goTo, onEnterView } = useAppShell()
 
-  const authConfig = ref<AuthConfig>({ google_oauth_enabled: false, google_client_id: '' })
+  const authConfig = ref<AuthConfig>({ google_oauth_enabled: false, google_client_id: '', demo_login_enabled: false })
   const authReady = ref(false)
   const authLoading = ref(false)
   const authError = ref('')
@@ -92,14 +93,16 @@ function createAuthSession() {
   })
 
   const currentTenant = computed(() => tenants.value.find((tenant) => tenant.id === activeTenantId.value))
+  // Googleログインとお試しログインのどちらも、ログインして権限で絞る。
+  const loginRequired = computed(() => authConfig.value.google_oauth_enabled || Boolean(authConfig.value.demo_login_enabled))
   const currentTenantRole = computed(() => {
-    if (!authConfig.value.google_oauth_enabled) return 'admin'
+    if (!loginRequired.value) return 'admin'
     if (currentUser.value?.role === 'admin') return 'admin'
     return currentUser.value?.tenant_memberships.find((membership) => membership.tenant_id === activeTenantId.value)?.role ?? 'viewer'
   })
   const canEdit = computed(() => currentTenantRole.value !== 'viewer')
   const isSystemAdmin = computed(() => (
-    !authConfig.value.google_oauth_enabled || currentUser.value?.role === 'admin'
+    !loginRequired.value || currentUser.value?.role === 'admin'
   ))
   // システムviewerは全テナントの管理画面を閲覧できる。更新はバックエンドが拒否する。
   const isSystemViewer = computed(() => currentUser.value?.role === 'viewer')
@@ -141,7 +144,7 @@ function createAuthSession() {
     const target = remembered ?? visibleMasterItems.value[0]
     if (target) goTo(target.key)
   }
-  const appAccessible = computed(() => authReady.value && (!authConfig.value.google_oauth_enabled || !!currentUser.value))
+  const appAccessible = computed(() => authReady.value && (!loginRequired.value || !!currentUser.value))
 
   function loadGoogleScript() {
     return new Promise<void>((resolve, reject) => {
@@ -230,7 +233,7 @@ function createAuthSession() {
     authLoading.value = true
     try {
       authConfig.value = await getAuthConfig()
-      if (!authConfig.value.google_oauth_enabled) {
+      if (!loginRequired.value) {
         currentUser.value = null
         await initializeTenantContext()
         return
@@ -249,6 +252,20 @@ function createAuthSession() {
       authReady.value = true
       authLoading.value = false
       if (authConfig.value.google_oauth_enabled && !currentUser.value) void initializeGoogleButton()
+    }
+  }
+
+  async function handleDemoLogin(email: string) {
+    authLoading.value = true
+    authError.value = ''
+    try {
+      const result = await loginWithDemoEmail(email)
+      currentUser.value = result.user
+      await initializeTenantContext()
+    } catch (error) {
+      authError.value = error instanceof Error ? error.message : 'ログインに失敗しました。'
+    } finally {
+      authLoading.value = false
     }
   }
 
@@ -491,6 +508,8 @@ function createAuthSession() {
     appAccessible,
     initializeAuth,
     handleLogout,
+    handleDemoLogin,
+    loginRequired,
     requestGoogleAccessToken,
     loadTenants,
     loadUsers,

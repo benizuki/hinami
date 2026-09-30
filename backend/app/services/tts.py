@@ -19,8 +19,8 @@ from typing import Any
 from .gemini import GeminiError, gemini_api_key_client
 
 
-DEFAULT_TTS_MODEL = "gemini-3.8-flash-lite-tts"
-DEFAULT_TTS_VOICE = "Sulafat"
+DEFAULT_TTS_MODEL = "gemini-3.8-flash-tts"
+DEFAULT_TTS_VOICE = "Laomedeia"
 # 既定では話し方の指示を送らず、声（GEMINI_TTS_VOICE）の素の読み上げにする。
 # 指示を足すと声の調子が指示に引っ張られ、長い指示では音声が返らないこともあった。
 # 調整したいときだけ GEMINI_TTS_STYLE に短い言葉で指定する（例: warm and enthusiastic）。

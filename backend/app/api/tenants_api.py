@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 
 from ..core.auth import create_tenant_entry, list_tenants, update_tenant_entry
 from ..schemas import TenantRecord, TenantUpdate
+from .common import ensure_root_org_unit
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ def create_tenant(payload: TenantRecord) -> TenantRecord:
         description=payload.description,
         enabled=payload.enabled,
     )
+    ensure_root_org_unit(tenant["id"])
     return TenantRecord(**tenant)
 
 

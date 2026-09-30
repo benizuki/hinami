@@ -335,6 +335,8 @@ export interface TenantRecord {
 export interface AuthConfig {
   google_oauth_enabled: boolean
   google_client_id: string
+  // メールアドレスだけで入れるお試しログイン（Docker Composeの体験用）
+  demo_login_enabled?: boolean
 }
 
 export interface AuthUser {
@@ -426,6 +428,21 @@ export async function loginWithGoogleCredential(credential: string): Promise<Aut
   }
   const result = await response.json() as AuthLoginResponse
   return result
+}
+
+export async function loginWithDemoEmail(email: string): Promise<AuthLoginResponse> {
+  const response = await fetch('/api/auth/demo', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { detail?: string | { msg?: string }[] }
+    const detail = Array.isArray(body.detail) ? 'メールアドレスの形式が正しくありません。' : body.detail
+    throw new Error(detail || `お試しログインAPI error: ${response.status}`)
+  }
+  return await response.json() as AuthLoginResponse
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {

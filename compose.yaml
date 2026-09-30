@@ -1,10 +1,12 @@
-# Docker Composeのお試し版（1人用・ログインなし・この端末のみ）。
-#   cp .env.example .env    # GEMINI_API_KEY を入れる
+# Docker Composeのお試し版（この端末のみ）。ログイン画面でメールアドレスを入れるだけで入れる。
+#   cp .env.example .env
 #   docker compose up -d --build
 #   open http://localhost:8080   # HINAMI_COMPOSE_PORT で変えられる
+#   ログイン後、「システム設定」からAIの接続を設定する
 #
-# Googleログインは使わない。ホストの127.0.0.1だけに公開し、アプリ側でも接続元を
-# Docker網のゲートウェイ（=このホスト）に限る。他の人に公開する用途には使わないこと。
+# Googleログインは使わない。パスワードも無いため、ホストの127.0.0.1だけに公開し、
+# アプリ側でも接続元をDocker網のゲートウェイ（=このホスト）に限る。他の人に公開する用途には使わないこと。
+# 最初に入ったメールアドレスは全体管理者になり、以降は一般利用者になる（組織は「ルート」）。
 services:
   app:
     build: .
@@ -14,6 +16,8 @@ services:
     environment:
       # .env に値があっても、このお試し版ではログインなしで動かす。
       GOOGLE_OAUTH_CLIENT_ID: ""
+      # メールアドレスだけで入れるお試しログイン。
+      HINAMI_DEMO_LOGIN: "1"
       # ホストの127.0.0.1:8080へ来た接続は、この網のゲートウェイから届く。
       # 同じ網の他のコンテナはゲートウェイ以外のアドレスになるため弾かれる。
       HINAMI_LOCAL_CLIENT_HOSTS: ${HINAMI_COMPOSE_GATEWAY:-172.29.90.1}

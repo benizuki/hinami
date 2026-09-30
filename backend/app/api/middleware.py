@@ -31,6 +31,7 @@ from ..core.auth import (
     ensure_role,
     ensure_tenant_role,
     get_tenant,
+    google_oauth_client_id,
     local_client_is_allowed,
     verify_app_token,
 )
@@ -79,7 +80,7 @@ def _required_role_for_request(method: str, path: str) -> str | None:
         return None
     if path in {"/api/health", "/api/auth/config", "/api/initial-data"} and method == "GET":
         return None
-    if path == "/api/auth/google" and method == "POST":
+    if path in {"/api/auth/google", "/api/auth/demo"} and method == "POST":
         return None
     # ユーザー管理はシステム管理者とテナント管理者の両方が使う。誰が何を触れるかは
     # テナントを見ないと決まらないため、ここは認証だけ求めて各エンドポイントで判定する。
@@ -198,11 +199,11 @@ def _request_origin_is_allowed(request: Request) -> bool:
 async def authorize_api_requests(request: Request, call_next):
     if not _request_host_is_valid(request):
         return JSONResponse(status_code=400, content={"detail": "Hostヘッダーが不正です。"})
-    if not auth_enabled() and not local_client_is_allowed(request.client.host if request.client else None):
-        # ログインなしの開発モードは、この端末（とComposeのゲートウェイ）からだけ使える。
+    # Googleで確認しないログイン（なし・お試し）は、この端末（とComposeのゲートウェイ）からだけ使える。
+    if not google_oauth_client_id() and not local_client_is_allowed(request.client.host if request.client else None):
         return JSONResponse(
             status_code=403,
-            content={"detail": "ログインなしの開発モードは、この端末からのみ利用できます。"},
+            content={"detail": "ログインなし・お試しログインのモードは、この端末からのみ利用できます。"},
         )
     request_path = _request_path(request)
     oversize = _declared_body_bytes(request)
@@ -213,6 +214,7 @@ async def authorize_api_requests(request: Request, call_next):
         "/api/health",
         "/api/auth/config",
         "/api/auth/google",
+        "/api/auth/demo",
         "/api/initial-data",
     }
     if (
