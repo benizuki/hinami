@@ -42,13 +42,17 @@ async def transcribe_speech(request: Request) -> AudioTranscriptionResponse:
     mime_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if mime_type not in SUPPORTED_AUDIO_MIME_TYPES:
         raise HTTPException(status_code=415, detail="対応していない音声形式です。")
-    audio_bytes = await request.body()
+    # 全文を溜めてから測ると上限を超えた分までメモリへ載るため、読みながら止める。
+    buffer = bytearray()
+    async for chunk in request.stream():
+        buffer.extend(chunk)
+        if len(buffer) > MAX_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail="音声データは8MB以下にしてください。")
+    audio_bytes = bytes(buffer)
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="音声データが空です。")
     if len(audio_bytes) < MIN_AUDIO_BYTES:
         raise HTTPException(status_code=400, detail="録音が短すぎます。1秒以上話してから停止してください。")
-    if len(audio_bytes) > MAX_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="音声データは8MB以下にしてください。")
     try:
         decision = await run_in_threadpool(generate_audio_transcription, audio_bytes, mime_type)
     except GeminiError as exc:

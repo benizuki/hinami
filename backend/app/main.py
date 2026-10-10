@@ -33,7 +33,12 @@ from .api import (  # noqa: E402
     work_journals_api,
 )
 from .api.common import ensure_root_org_unit  # noqa: E402
-from .api.middleware import allowed_origins, authorize_api_requests, prune_ai_usage  # noqa: E402
+from .api.middleware import (  # noqa: E402
+    RequestBodyLimitMiddleware,
+    allowed_origins,
+    authorize_api_requests,
+    prune_ai_usage,
+)
 from .core.auth import ensure_auth_secret, ensure_user_master, list_tenants, validate_auth_configuration  # noqa: E402
 from .core.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from .runtime import is_production  # noqa: E402
@@ -61,6 +66,7 @@ app = FastAPI(
 )
 
 # 後から登録したミドルウェアほど外側で動く。認可の検査を最も外側に置く。
+app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,

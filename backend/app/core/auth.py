@@ -507,11 +507,16 @@ def update_user_master_entry(email: str, payload: dict[str, Any]) -> dict[str, A
   for index, row in enumerate(rows):
     if not isinstance(row, dict) or str(row.get("email", "")).strip().lower() != normalized_email:
       continue
+    # 渡されなかった項目は今の値を残す。省いただけでGoogle連携が外れたり、
+    # 無効の利用者が有効に戻ったりしないようにする。
+    def field(key: str) -> Any:
+      return payload[key] if key in payload else row.get(key)
+
     next_email = str(payload.get("email") or normalized_email).strip().lower()
-    next_subject = str(payload.get("google_subject") or "").strip() or None
-    next_role = _normalize_system_role(payload.get("role", row.get("role")))
+    next_subject = str(field("google_subject") or "").strip() or None
+    next_role = _normalize_system_role(field("role"))
     _assert_unique(next_email, next_subject, ignore_email=normalized_email)
-    next_enabled = payload.get("enabled", True) is not False
+    next_enabled = field("enabled") is not False
     # 無効化・ロール変更・メール変更は、発行済みトークンを失効させてから反映する。
     # ロールは検証時にマスタから引き直されるが、失効させておけば再ログインを強制できる。
     revoke = (
@@ -524,10 +529,10 @@ def update_user_master_entry(email: str, payload: dict[str, Any]) -> dict[str, A
       "token_version": _token_version_of(row) + (1 if revoke else 0),
       "email": next_email,
       "google_subject": next_subject,
-      "name": str(payload.get("name") or "").strip() or next_email,
-      "department": str(payload.get("department") or "").strip() or None,
-      "department_id": str(payload.get("department_id") or "").strip() or None,
-      "org_unit_id": str(payload.get("org_unit_id") or "").strip() or None,
+      "name": str(field("name") or "").strip() or next_email,
+      "department": str(field("department") or "").strip() or None,
+      "department_id": str(field("department_id") or "").strip() or None,
+      "org_unit_id": str(field("org_unit_id") or "").strip() or None,
       "role": next_role,
       "tenant_memberships": payload.get("tenant_memberships", row.get("tenant_memberships")),
       "enabled": next_enabled,
@@ -664,6 +669,9 @@ def verify_google_credential(credential: str) -> dict[str, str]:
   email = str(info.get("email", "")).strip().lower()
   if not email:
     raise HTTPException(status_code=401, detail="Google 認証からメールアドレスを取得できませんでした。")
+  # 未確認のメールは本人のものと限らない。メールで利用者を照合する前に弾く。
+  if info.get("email_verified") not in (True, "true"):
+    raise HTTPException(status_code=401, detail="Google アカウントのメールアドレスが確認されていません。")
   return {
     "google_subject": str(info.get("sub") or "").strip(),
     "email": email,
@@ -674,7 +682,12 @@ def verify_google_credential(credential: str) -> dict[str, str]:
 
 def authenticate_google_credential(credential: str, *, root_org_unit_id: str = "") -> dict[str, Any]:
   google_user = verify_google_credential(credential)
-  user = _find_user_by_subject(google_user["google_subject"]) or _find_user_by_email(google_user["email"])
+  user = _find_user_by_subject(google_user["google_subject"])
+  if not user:
+    user = _find_user_by_email(google_user["email"])
+    if user and user.get("google_subject") and user["google_subject"] != google_user["google_subject"]:
+      # メールでの照合は、まだGoogle連携していない利用者の初回紐付けにだけ使う。
+      raise HTTPException(status_code=403, detail="このメールアドレスは別のGoogleアカウントに紐付いています。")
   if not user:
     master_is_empty = len(list_user_master_entries()) == 0
     allowed_bootstrap_admins = bootstrap_admin_emails()
@@ -705,7 +718,7 @@ def authenticate_google_credential(credential: str, *, root_org_unit_id: str = "
     else:
       raise HTTPException(status_code=403, detail="ユーザーマスタに登録されたアカウントのみ利用できます。")
   if not user.get("google_subject") and google_user.get("google_subject"):
-    user = update_user_master_entry(user["email"], {**user, "google_subject": google_user["google_subject"]})
+    user = update_user_master_entry(user["email"], {"google_subject": google_user["google_subject"]})
   return {
     **user,
     "oauth_name": google_user.get("name") or user.get("name"),

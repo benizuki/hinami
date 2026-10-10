@@ -54,6 +54,10 @@ const TENANT_ROLE_OPTIONS = ['admin', 'manager', 'user', 'viewer']
 
 // テナント管理者には自分が管理するテナントだけを見せる。他テナントの所属は
 // バックエンドでも保持されるため、ここで編集対象から外しても失われない。
+// メール・表示名・Google連携・有効/無効はアカウント全体に効くため、テナント管理者は
+// 追加時のメールと表示名を除いて変えられない（バックエンドも受け付けない）。
+const accountLocked = computed(() => !props.isSystemAdmin && !!props.editingEmail)
+
 const editableTenants = computed(() => (
   props.isSystemAdmin
     ? props.tenants
@@ -93,8 +97,9 @@ function setTenantRole(tenantId: string, role: string) {
       <v-card-subtitle>Googleログインと、利用できるテナントごとのロール・所属組織を登録します。</v-card-subtitle>
       <v-card-text>
         <div class="user-editor-grid">
-          <label><span>メールアドレス</span><input v-model="form.email" type="email" placeholder="user@example.com" /></label>
-          <label><span>表示名</span><input v-model="form.name" placeholder="山田 太郎" /></label>
+          <label><span>メールアドレス</span><input v-model="form.email" type="email" placeholder="user@example.com" :readonly="accountLocked" /></label>
+          <label><span>表示名</span><input v-model="form.name" placeholder="山田 太郎" :readonly="accountLocked" /></label>
+          <small v-if="!isSystemAdmin" class="user-editor-grid__wide tenant-access-hint">{{ editingEmail ? 'メールアドレスと表示名の変更はシステム管理者のみ行えます。' : '登録済みのメールアドレスなら、このテナントへの所属だけを追加します。' }}</small>
           <div class="user-editor-field user-editor-grid__wide">
             <v-select
               v-model="form.role"
@@ -109,7 +114,7 @@ function setTenantRole(tenantId: string, role: string) {
               :hide-details="isSystemAdmin"
             ></v-select>
           </div>
-          <label class="user-editor-grid__wide"><span>Google Subject（任意）</span><input v-model="form.google_subject" placeholder="未入力なら初回ログイン時にメールで照合します" /></label>
+          <label v-if="isSystemAdmin" class="user-editor-grid__wide"><span>Google Subject（任意）</span><input v-model="form.google_subject" placeholder="未入力なら初回ログイン時にメールで照合します" /></label>
           <section class="user-editor-grid__wide tenant-access-editor">
             <div><b>テナント権限と所属</b><small>利用を許可するテナントごとに、ロールと所属組織を選択します。組織はテナントごとに別なので、所属もテナントごとに決めます。</small></div>
             <article v-for="tenant in editableTenants" :key="tenant.id">
@@ -138,7 +143,7 @@ function setTenantRole(tenantId: string, role: string) {
             </article>
             <small class="tenant-access-hint">所属が未設定の利用者は、そのテナントで記録を保存できません。全部門を統括する場合は、組織マスターで種別「全社」の組織を作って選びます。</small>
           </section>
-          <label class="user-enabled-toggle"><input v-model="form.enabled" type="checkbox" /><span>有効にする</span></label>
+          <label v-if="isSystemAdmin" class="user-enabled-toggle"><input v-model="form.enabled" type="checkbox" /><span>有効にする</span></label>
         </div>
       </v-card-text>
       <v-card-actions><v-spacer></v-spacer><v-btn variant="text" @click="open = false">キャンセル</v-btn><v-btn color="primary" prepend-icon="mdi-content-save-outline" @click="emit('save')">保存</v-btn></v-card-actions>

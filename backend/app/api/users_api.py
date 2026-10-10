@@ -140,20 +140,9 @@ def users(request: Request) -> list[UserMasterEntry]:
 @router.post("/api/users", response_model=UserMasterEntry)
 def create_user(payload: UserMasterEntry, request: Request) -> UserMasterEntry:
     scope = _user_admin_scope(request, write=True)
-    memberships = [membership.model_dump() for membership in payload.tenant_memberships]
-    role = payload.role
     if scope is not None:
-        # テナント管理者が作るのは自テナント専用の利用者。システム権限は持たせない。
-        requested_membership = _membership_for(memberships, scope)
-        memberships = [{
-            "tenant_id": scope,
-            "role": requested_membership.get("role", "viewer") if requested_membership else "viewer",
-            "org_unit_id": (
-                str(requested_membership.get("org_unit_id") or "").strip()
-                if requested_membership else ""
-            ),
-        }]
-        role = "none"
+        return _add_user_to_tenant(payload, scope)
+    memberships = [membership.model_dump() for membership in payload.tenant_memberships]
     memberships = _validated_memberships(memberships, default_to_root=True)
     entry = create_user_master_entry(
         email=payload.email,
@@ -161,44 +150,82 @@ def create_user(payload: UserMasterEntry, request: Request) -> UserMasterEntry:
         department=payload.department,
         department_id=payload.department_id,
         org_unit_id=payload.org_unit_id,
-        role=role,
+        role=payload.role,
         enabled=payload.enabled,
         google_subject=payload.google_subject,
-        tenant_memberships=(
-            memberships
-            if scope is not None or "tenant_memberships" in payload.model_fields_set
-            else None
-        ),
+        tenant_memberships=memberships if "tenant_memberships" in payload.model_fields_set else None,
     )
-    if scope is not None:
-        return UserMasterEntry(**_visible_to_tenant_admin(entry, scope))
     return UserMasterEntry(**entry)
+
+
+def _add_user_to_tenant(payload: UserMasterEntry, tenant_id: str) -> UserMasterEntry:
+    """テナント管理者によるユーザー追加。自テナントの所属とロールだけを決める。
+
+    メールアドレス・Google連携・有効/無効・部署はアカウント全体に効くため、
+    テナント管理者には決めさせない。未登録のメールなら自テナント専用の利用者を作り、
+    登録済みなら所属を足すだけにして、他テナントでの扱いには触れない。
+    """
+    requested = _membership_for(
+        [membership.model_dump() for membership in payload.tenant_memberships], tenant_id
+    )
+    membership = _validated_memberships([{
+        "tenant_id": tenant_id,
+        "role": requested.get("role", "viewer") if requested else "viewer",
+        "org_unit_id": str(requested.get("org_unit_id") or "").strip() if requested else "",
+    }], default_to_root=True)[0]
+    normalized_email = payload.email.strip().lower()
+    current = next(
+        (entry for entry in list_user_master_entries() if entry["email"] == normalized_email),
+        None,
+    )
+    if current is None:
+        entry = create_user_master_entry(
+            email=normalized_email,
+            name=payload.name,
+            department=None,
+            department_id=None,
+            org_unit_id=None,
+            role="none",
+            enabled=True,
+            google_subject=None,
+            tenant_memberships=[membership],
+        )
+        return UserMasterEntry(**_visible_to_tenant_admin(entry, tenant_id))
+    if current.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="システム管理者は編集できません。")
+    if tenant_role(current, tenant_id) is not None:
+        raise HTTPException(status_code=409, detail="このユーザーは既にこのテナントに所属しています。")
+    entry = update_user_master_entry(normalized_email, {
+        "tenant_memberships": [*current.get("tenant_memberships", []), membership],
+    })
+    return UserMasterEntry(**_visible_to_tenant_admin(entry, tenant_id))
 
 
 @router.put("/api/users/{email}", response_model=UserMasterEntry)
 def update_user(email: str, payload: UserMasterUpdate, request: Request) -> UserMasterEntry:
     scope = _user_admin_scope(request, write=True)
-    changes = payload.model_dump(exclude_unset=True)
-    if scope is not None:
-        current = _tenant_managed_entry(email, scope)
-        # システムロールと他テナントの所属は、テナント管理者の変更対象外。
-        changes["role"] = current["role"]
-        changes["tenant_memberships"] = _merged_memberships(
-            current.get("tenant_memberships", []),
-            changes.get("tenant_memberships", []),
-            scope,
-        )
-        if email.strip().lower() == request_user_email_or_empty(request):
-            # 自分の管理権限を落とすと、このテナントを管理できる人がいなくなりうる。
-            own_membership = _membership_for(changes["tenant_memberships"], scope)
-            if not own_membership or own_membership.get("role") != "admin":
-                raise HTTPException(status_code=400, detail="自分自身の管理権限は変更できません。")
-    if "tenant_memberships" in changes:
-        changes["tenant_memberships"] = _validated_memberships(changes["tenant_memberships"])
-    entry = update_user_master_entry(email, changes)
-    if scope is not None:
-        return UserMasterEntry(**_visible_to_tenant_admin(entry, scope))
-    return UserMasterEntry(**entry)
+    if scope is None:
+        changes = payload.model_dump(exclude_unset=True)
+        if "tenant_memberships" in changes:
+            changes["tenant_memberships"] = _validated_memberships(changes["tenant_memberships"])
+        return UserMasterEntry(**update_user_master_entry(email, changes))
+    current = _tenant_managed_entry(email, scope)
+    # テナント管理者が変えられるのは自テナントでのロールと所属組織だけ。
+    # メールやGoogle連携まで変えられると、共有ユーザーの他テナント権限ごと乗っ取れる。
+    requested = _membership_for(
+        [membership.model_dump() for membership in payload.tenant_memberships], scope
+    )
+    own_memberships = _validated_memberships(
+        _merged_memberships([], [requested] if requested else [], scope)
+    )
+    memberships = [*_merged_memberships(current.get("tenant_memberships", []), [], scope), *own_memberships]
+    if email.strip().lower() == request_user_email_or_empty(request):
+        # 自分の管理権限を落とすと、このテナントを管理できる人がいなくなりうる。
+        own_membership = _membership_for(memberships, scope)
+        if not own_membership or own_membership.get("role") != "admin":
+            raise HTTPException(status_code=400, detail="自分自身の管理権限は変更できません。")
+    entry = update_user_master_entry(email, {"tenant_memberships": memberships})
+    return UserMasterEntry(**_visible_to_tenant_admin(entry, scope))
 
 
 @router.delete("/api/users/{email}", status_code=204)
@@ -220,8 +247,5 @@ def delete_user(email: str, request: Request) -> Response:
         delete_user_master_entry(email)
         return Response(status_code=204)
     # 他テナントでも使う利用者は、所属を外すだけにとどめる。
-    update_user_master_entry(email, {
-        **current,
-        "tenant_memberships": remaining,
-    })
+    update_user_master_entry(email, {"tenant_memberships": remaining})
     return Response(status_code=204)

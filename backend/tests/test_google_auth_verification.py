@@ -102,6 +102,7 @@ class GoogleAuthVerificationTest(unittest.TestCase):
         verify_token.return_value = {
             "sub": "subject",
             "email": "user@example.com",
+            "email_verified": True,
             "name": "User",
         }
 
@@ -112,6 +113,44 @@ class GoogleAuthVerificationTest(unittest.TestCase):
             verify_token.call_args.kwargs["clock_skew_in_seconds"],
             auth.GOOGLE_TOKEN_CLOCK_SKEW_SECONDS,
         )
+
+    @patch("google.oauth2.id_token.verify_oauth2_token")
+    @patch.object(auth, "google_oauth_client_id", return_value="client-id")
+    def test_unverified_email_is_rejected(self, _client_id, verify_token) -> None:
+        """未確認のメールで登録済みの利用者として入れてしまわないようにする。"""
+        for claims in (
+            {"sub": "subject", "email": "user@example.com", "email_verified": False},
+            {"sub": "subject", "email": "user@example.com"},
+        ):
+            with self.subTest(claims=claims):
+                verify_token.return_value = claims
+
+                with self.assertRaises(HTTPException) as context:
+                    auth.verify_google_credential("credential")
+
+                self.assertEqual(context.exception.status_code, 401)
+
+    @patch.object(auth, "update_user_master_entry")
+    @patch.object(auth, "list_user_master_entries")
+    @patch.object(auth, "verify_google_credential")
+    def test_email_bound_to_another_google_account_is_rejected(
+        self,
+        verify_credential,
+        list_users,
+        update_user,
+    ) -> None:
+        verify_credential.return_value = {**FIRST_GOOGLE_USER, "google_subject": "intruder"}
+        list_users.return_value = [{
+            "email": "admin@example.com",
+            "google_subject": "subject",
+            "enabled": True,
+        }]
+
+        with self.assertRaises(HTTPException) as context:
+            auth.authenticate_google_credential("credential")
+
+        self.assertEqual(context.exception.status_code, 403)
+        update_user.assert_not_called()
 
     @patch("google.oauth2.id_token.verify_oauth2_token")
     @patch.object(auth, "google_oauth_client_id", return_value="client-id")

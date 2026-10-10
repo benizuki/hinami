@@ -6,6 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from fastapi import Request
+
 from backend.app import main
 
 
@@ -93,6 +95,56 @@ class LoginRateLimitTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 413)
+
+
+
+class StreamingBodyLimitTest(unittest.TestCase):
+    """Content-Lengthを宣言しない転送でも、本文を全部溜める前に止める。"""
+
+    @staticmethod
+    def _chunks(total: int, size: int = 64 * 1024):
+        sent = 0
+        while sent < total:
+            chunk = min(size, total - sent)
+            sent += chunk
+            yield b"\0" * chunk
+
+    def test_an_undeclared_oversized_body_is_rejected(self) -> None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+        app.add_middleware(middleware.RequestBodyLimitMiddleware, max_bytes=1024)
+
+        @app.post("/echo")
+        async def echo(request: Request) -> dict[str, int]:
+            return {"size": len(await request.body())}
+
+        client = TestClient(app)
+
+        self.assertEqual(client.post("/echo", content=self._chunks(1024)).json(), {"size": 1024})
+        response = client.post("/echo", content=self._chunks(4096, size=256))
+        self.assertEqual(response.status_code, 413)
+
+    def test_undeclared_audio_over_the_limit_is_rejected_while_streaming(self) -> None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from backend.app.api import speech_api
+
+        app = FastAPI()
+        app.include_router(speech_api.router)
+        client = TestClient(app)
+
+        with patch.object(speech_api, "generate_audio_transcription") as transcribe:
+            response = client.post(
+                "/api/speech/transcribe",
+                content=self._chunks(speech_api.MAX_AUDIO_BYTES + 1),
+                headers={"Content-Type": "audio/webm"},
+            )
+
+        self.assertEqual(response.status_code, 413)
+        transcribe.assert_not_called()
 
 
 if __name__ == "__main__":

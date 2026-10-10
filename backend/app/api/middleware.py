@@ -95,8 +95,6 @@ def _required_role_for_request(method: str, path: str) -> str | None:
         return "admin"
     if path.startswith("/api/tenants"):
         return "admin" if method != "GET" else "none"
-    if path.startswith("/api/departments/") and path.endswith("/tenant"):
-        return "admin"
     # 組織の階層は所属の基準になるため、参照は全員、変更はテナント管理者に限る。
     if path.startswith("/api/org-units"):
         return "viewer" if method == "GET" else "admin"
@@ -150,8 +148,8 @@ def _request_host_is_valid(request: Request) -> bool:
 def _declared_body_bytes(request: Request) -> int | None:
     """Content-Lengthが読めればそのバイト数を返す。無ければNone。
 
-    chunked転送では宣言が無いため、これだけでは上限を保証できない。
-    Gateway側のボディ上限と併用する前提の、二重防御のうちのアプリ側。
+    宣言の大きいリクエストを本文を読む前に断るためのもの。宣言の無いchunked転送は
+    RequestBodyLimitMiddlewareが読み込みながら上限を確かめる。
     """
     raw = request.headers.get("Content-Length", "").strip()
     if not raw:
@@ -160,6 +158,36 @@ def _declared_body_bytes(request: Request) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+class RequestBodyLimitMiddleware:
+    """本文を読み込みながら累積バイト数を数え、上限を超えた時点で413にする。
+
+    Content-Lengthを宣言しない転送でも、全文をメモリへ溜める前に止められる。
+    超過はエンドポイントが本文を読んでいる最中に起きるため、HTTPExceptionとして
+    投げればFastAPIの例外処理がそのまま413の応答にする。
+    """
+
+    def __init__(self, app, max_bytes: int | None = None) -> None:
+        self.app = app
+        self.max_bytes = MAX_REQUEST_BYTES if max_bytes is None else max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise HTTPException(status_code=413, detail="リクエストが大きすぎます。")
+            return message
+
+        await self.app(scope, limited_receive, send)
 
 
 def client_ip(request: Request) -> str:
@@ -251,7 +279,7 @@ async def authorize_api_requests(request: Request, call_next):
         if required_role == "none":
             # 認証だけを求めるパス。テナント所属の有無は各エンドポイントが判断する。
             pass
-        elif request_path.startswith(("/api/users", "/api/tenants", "/api/departments", "/api/backups", "/api/settings")):
+        elif request_path.startswith(("/api/users", "/api/tenants", "/api/backups", "/api/settings")):
             ensure_role(user, required_role)  # type: ignore[arg-type]
         else:
             request.state.tenant_role = ensure_tenant_role(
