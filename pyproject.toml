@@ -22,3 +22,9 @@ dev = [
 
 [tool.uv]
 package = false
+
+# 依存パッケージはTakumi Guard（悪性パッケージを遮断するミラー）経由で取得する。
+[[tool.uv.index]]
+name = "takumi-guard"
+url = "https://pypi.flatt.tech/simple/"
+default = true
